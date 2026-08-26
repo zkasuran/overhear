@@ -10,7 +10,7 @@ and music are all MiniMax models served on GMI Cloud.
 Built for **MiniMax Week** (the MiniMaxathon), Multimodality track.
 
 - Live demo: https://overhear-eight.vercel.app
-- Demo video: `<add after upload>`
+- Demo video: https://youtu.be/Q7MgrND3giE
 
 ## Why
 
