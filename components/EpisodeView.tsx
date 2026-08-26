@@ -42,11 +42,13 @@ export function EpisodeView({
 }) {
   const preset = FORMATS[format];
   const [showLyrics, setShowLyrics] = useState(false);
+  const site = "https://overhear-eight.vercel.app";
   const share =
     `https://twitter.com/intent/tweet?text=` +
     encodeURIComponent(
       `I turned "${episode.title}" into a two-host audio episode with its own theme song 🎧\nBuilt with MiniMax M3 + Speech 2.8 + Music 3.0 on GMI Cloud. #MiniMaxWeek`,
-    );
+    ) +
+    `&url=${encodeURIComponent(site)}`;
 
   return (
     <section className="flex flex-col gap-5">

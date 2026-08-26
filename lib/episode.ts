@@ -108,8 +108,18 @@ export function parseEpisode(raw: string): Episode {
   };
 }
 
-/** Generate the full episode script + theme spec with M3. */
+/** Generate the full episode script + theme spec with M3. Retries once, since a
+ * single call can hit a transient upstream error or return unparseable JSON. */
 export async function writeEpisode(input: EpisodeInput): Promise<Episode> {
-  const text = await chat(buildMessages(input), { maxTokens: 3000, temperature: 0.8 });
-  return parseEpisode(text);
+  const messages = buildMessages(input);
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const text = await chat(messages, { maxTokens: 2200, temperature: attempt === 0 ? 0.8 : 0.4 });
+      return parseEpisode(text);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("script generation failed");
 }

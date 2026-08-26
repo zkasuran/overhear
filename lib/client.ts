@@ -15,6 +15,43 @@ async function asJson(res: Response) {
   return data;
 }
 
+// Both the script and music routes stream NDJSON: {status} keepalives while the
+// model works, then a final line with the result (or {error}). Read to the end
+// and return the last line that satisfies `isResult`.
+async function ndjsonResult(
+  res: Response,
+  isResult: (o: Record<string, unknown>) => boolean,
+  onTick?: () => void,
+): Promise<Record<string, unknown>> {
+  if (!res.ok || !res.body) throw new Error(`request failed (${res.status})`);
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  let final: Record<string, unknown> | null = null;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      let o: Record<string, unknown>;
+      try {
+        o = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (typeof o.error === "string") throw new Error(o.error);
+      if (o.status && onTick) onTick();
+      if (isResult(o)) final = o;
+    }
+  }
+  if (!final) throw new Error("stream ended without a result");
+  return final;
+}
+
 export async function requestScript(
   source: string,
   format: FormatId,
@@ -24,7 +61,8 @@ export async function requestScript(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ source, format }),
   });
-  return asJson(res);
+  const o = await ndjsonResult(res, (x) => x.episode !== undefined);
+  return { episode: o.episode as Episode, format: (o.format as FormatId) ?? format };
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -89,7 +127,7 @@ export async function narrateAll(
 }
 
 // Music streams NDJSON keepalives while it renders (see app/api/music/route.ts),
-// then a final line carrying the url. Read the stream and take that line.
+// then a final line carrying the url.
 export async function composeMusic(
   episode: Episode,
   onTick?: () => void,
@@ -99,33 +137,9 @@ export async function composeMusic(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt: episode.music.prompt, lyrics: episode.music.lyrics }),
   });
-  if (!res.ok || !res.body) throw new Error(`theme failed (${res.status})`);
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  let buf = "";
-  let final: { url?: string; durationMs?: number | null } | null = null;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    let nl: number;
-    while ((nl = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, nl).trim();
-      buf = buf.slice(nl + 1);
-      if (!line) continue;
-      let o: { status?: string; url?: string; durationMs?: number | null; error?: string };
-      try {
-        o = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      if (o.error) throw new Error(o.error);
-      if (o.status && onTick) onTick();
-      if (o.url !== undefined) final = o;
-    }
-  }
-  if (!final?.url) throw new Error("theme produced no audio");
-  return { url: final.url, durationMs: final.durationMs ?? null };
+  const o = await ndjsonResult(res, (x) => x.url !== undefined, onTick);
+  if (!o.url) throw new Error("theme produced no audio");
+  return { url: o.url as string, durationMs: (o.durationMs as number) ?? null };
 }
 
 export type Voiced = { segment: Segment; url: string };
