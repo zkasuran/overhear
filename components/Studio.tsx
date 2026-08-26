@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FORMATS, type FormatId } from "@/lib/voices";
 import type { Episode } from "@/lib/types";
 import { requestScript, narrateAll, composeMusic, proxied } from "@/lib/client";
@@ -27,6 +27,21 @@ export default function Studio() {
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const busy = ["scripting", "voicing", "composing", "mixing"].includes(phase);
+
+  // Progressive-reveal hook for the demo-video web capture (see CODEX-VIDEO-BRIEF).
+  // Inert for real users: elements default to full opacity; only a capture calls this.
+  useEffect(() => {
+    (window as unknown as { setReveal?: (k: number, scope?: string) => void }).setReveal = (
+      k: number,
+      scope = "#stage",
+    ) => {
+      const els = Array.from(document.querySelectorAll<HTMLElement>(`${scope} [data-step]`));
+      els.forEach((el, i) => {
+        el.style.transition = "opacity .25s ease";
+        el.style.opacity = i < k ? "1" : "0.12";
+      });
+    };
+  }, []);
 
   const generate = useCallback(async () => {
     try {
@@ -89,8 +104,9 @@ export default function Studio() {
         </div>
       )}
 
-      <div className="glass rounded-2xl p-5 sm:p-6 flex flex-col gap-4">
+      <div id="stage" className="glass rounded-2xl p-5 sm:p-6 flex flex-col gap-4">
         <textarea
+          data-step
           value={source}
           onChange={(e) => setSource(e.target.value)}
           placeholder="Paste an article, or type a topic like “why the sky is blue”…"
@@ -98,7 +114,7 @@ export default function Studio() {
           className="w-full resize-y rounded-xl border border-white/10 bg-black/20 p-3 text-[15px] outline-none focus:border-accent/60"
         />
         {!episode && (
-          <div className="flex flex-wrap gap-2">
+          <div data-step className="flex flex-wrap gap-2">
             {SAMPLES.map((s) => (
               <button key={s} onClick={() => setSource(s)}
                 className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-muted hover:text-foreground">
@@ -107,7 +123,7 @@ export default function Studio() {
             ))}
           </div>
         )}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div data-step className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {Object.values(FORMATS).map((f) => (
             <button key={f.id} onClick={() => setFormat(f.id)} title={f.blurb}
               className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
@@ -117,7 +133,7 @@ export default function Studio() {
             </button>
           ))}
         </div>
-        <div className="flex items-center justify-between gap-3">
+        <div data-step className="flex items-center justify-between gap-3">
           <span className="text-xs text-muted font-mono">M3 · Speech 2.8 · Music 3.0 on GMI Cloud</span>
           <button onClick={generate} disabled={busy || source.trim().length < 3}
             className="grad-btn text-black font-semibold rounded-xl px-5 py-2.5 disabled:opacity-40 disabled:cursor-not-allowed">
